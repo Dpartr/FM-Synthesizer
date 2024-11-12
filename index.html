@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FM Synthesizer</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        label {
+            font-weight: 500;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        .buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button.animate {
+            background: #2196F3;
+        }
+        button.animate:hover {
+            background: #1976D2;
+        }
+        .value-display {
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>FM Synthesizer</h1>
+        
+        <div class="buttons">
+            <button id="playButton">Play/Stop</button>
+            <button id="animateButton" class="animate">Start Animation</button>
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="carrier">Carrier Frequency</label>
+                <input type="range" id="carrier" min="50" max="1000" value="440" />
+                <span class="value-display" id="carrier-value">440 Hz</span>
+            </div>
+            
+            <div class="control-group">
+                <label for="modulator">Modulator Frequency</label>
+                <input type="range" id="modulator" min="1" max="100" value="10" />
+                <span class="value-display" id="modulator-value">10 Hz</span>
+            </div>
+            
+            <div class="control-group">
+                <label for="modIndex">Modulation Index</label>
+                <input type="range" id="modIndex" min="0" max="1000" value="100" />
+                <span class="value-display" id="modIndex-value">100</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let audioContext;
+        let osc;
+        let modOsc;
+        let modGain;
+        let isPlaying = false;
+        let isAnimating = false;
+        let animationFrame;
+        let startTime;
+
+        // Initialize audio context on first user interaction
+        document.getElementById('playButton').addEventListener('click', () => {
+            if (!audioContext) {
+                audioContext = new AudioContext();
+            }
+            
+            if (!isPlaying) {
+                startFM();
+                isPlaying = true;
+            } else {
+                stopFM();
+                isPlaying = false;
+            }
+        });
+
+        // Animation toggle
+        document.getElementById('animateButton').addEventListener('click', () => {
+            isAnimating = !isAnimating;
+            document.getElementById('animateButton').textContent = 
+                isAnimating ? 'Stop Animation' : 'Start Animation';
+            
+            if (isAnimating) {
+                startTime = Date.now();
+                animate();
+            } else {
+                cancelAnimationFrame(animationFrame);
+            }
+        });
+
+        function startFM() {
+            // Carrier oscillator
+            osc = audioContext.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.value = parseFloat(document.getElementById('carrier').value);
+
+            // Modulator oscillator
+            modOsc = audioContext.createOscillator();
+            modOsc.type = 'sine';
+            modOsc.frequency.value = parseFloat(document.getElementById('modulator').value);
+
+            // Modulation gain
+            modGain = audioContext.createGain();
+            modGain.gain.value = parseFloat(document.getElementById('modIndex').value);
+
+            // Connect modules
+            modOsc.connect(modGain);
+            modGain.connect(osc.frequency);
+            osc.connect(audioContext.destination);
+
+            // Start oscillators
+            osc.start();
+            modOsc.start();
+        }
+
+        function stopFM() {
+            osc.stop();
+            modOsc.stop();
+        }
+
+        // Procedural animation function
+        function animate() {
+            if (!isAnimating) return;
+
+            const time = (Date.now() - startTime) / 1000; // Time in seconds
+
+            // Carrier frequency animation
+            // Uses sine and cosine to create a flowing pattern
+            const carrierValue = 440 + 
+                Math.sin(time * 0.5) * 200 + 
+                Math.cos(time * 0.3) * 100;
+            
+            // Modulator frequency animation
+            // Creates a slower, organic movement
+            const modulatorValue = 20 + 
+                Math.sin(time * 0.2) * 15 + 
+                Math.cos(time * 0.1) * 10;
+            
+            // Modulation index animation
+            // Creates dramatic swells in timbre
+            const indexValue = 300 + 
+                Math.sin(time * 0.15) * 250 + 
+                Math.cos(time * 0.08) * 150;
+
+            // Update slider positions
+            document.getElementById('carrier').value = carrierValue;
+            document.getElementById('modulator').value = modulatorValue;
+            document.getElementById('modIndex').value = indexValue;
+
+            // Update synth parameters
+            if (osc) osc.frequency.value = carrierValue;
+            if (modOsc) modOsc.frequency.value = modulatorValue;
+            if (modGain) modGain.gain.value = indexValue;
+
+            // Update displays
+            updateValue('carrier');
+            updateValue('modulator');
+            updateValue('modIndex');
+
+            animationFrame = requestAnimationFrame(animate);
+        }
+
+        // Update parameter displays and values
+        function updateValue(id) {
+            const value = document.getElementById(id).value;
+            const display = document.getElementById(id + '-value');
+            
+            switch(id) {
+                case 'carrier':
+                    display.textContent = `${Math.round(value)} Hz`;
+                    break;
+                case 'modulator':
+                    display.textContent = `${Math.round(value * 10) / 10} Hz`;
+                    break;
+                case 'modIndex':
+                    display.textContent = Math.round(value);
+                    break;
+            }
+        }
+
+        // Add event listeners for all controls
+        ['carrier', 'modulator', 'modIndex'].forEach(id => {
+            const element = document.getElementById(id);
+            element.addEventListener('input', () => updateValue(id));
+        });
+    </script>
+</body>
+</html>
